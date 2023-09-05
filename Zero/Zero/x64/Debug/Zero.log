@@ -1,8 +1,4 @@
 ﻿  Building 'Zero' with toolset 'WindowsKernelModeDriver10.0' and the 'Desktop' target platform.
   Zero.cpp
   Zero.vcxproj -> C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\Zero\x64\Debug\Zero.sys
-  Done Adding Additional Store
-  Successfully signed: C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\Zero\x64\Debug\Zero.sys
-  
-  Inf2Cat task was skipped as there were no inf files to process
-  
+SIGNTASK : SignTool error : No certificates were found that met all the given criteria.

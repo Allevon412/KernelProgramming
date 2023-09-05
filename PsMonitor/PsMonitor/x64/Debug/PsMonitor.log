@@ -1,0 +1,8 @@
+﻿  Building 'PsMonitor' with toolset 'WindowsKernelModeDriver10.0' and the 'Desktop' target platform.
+  PsMonitor.cpp
+  PsMonitor.vcxproj -> C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\PsMonitor\x64\Debug\PsMonitor.sys
+  Done Adding Additional Store
+  Successfully signed: C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\PsMonitor\x64\Debug\PsMonitor.sys
+  
+  Inf2Cat task was skipped as there were no inf files to process
+  
