@@ -3,8 +3,11 @@
 
 #include "pch.h"
 #include "..\PsMonitor\PsMonitorCommon.h"
+#include "PsMonitorClientApp.h"
 
 
+LinkedList<Process> ProcessList;
+//implementation of linkedlist failed becaus i forgot to realize that the processes that already exist on the system will cause a crash when attempting to remove them 
 
 int Error(const char* message)
 {
@@ -51,10 +54,19 @@ void DisplayInfo(BYTE* buffer, DWORD size)
             {
                 DisplayTime(header->Time);
                 auto info = (ProcessExitInfo*)buffer;
-                printf("Process %d Exited\n", info->ProcessId);
+                Process removal = { info->ProcessId, L"" };
+                Node<Process>* procPtr = ProcessList.retreiveNode(removal);
+                if (procPtr != nullptr)
+                {
+                    printf("Process %ws : %d Exited\n", procPtr->data.ImageName.c_str(), info->ProcessId);
+                    ProcessList.removeNode(removal);
+                }
+                else
+                {
+                    printf("Process %d Exited\n", info->ProcessId);
+                }
                 break;
             }
-
             case ItemType::ProcessCreate:
             {
                 DisplayTime(header->Time);
@@ -69,9 +81,61 @@ void DisplayInfo(BYTE* buffer, DWORD size)
                         break;
                     }
                 }
-                printf("[*] Process %ws : %d Created.\n\t\tCommand Line: %ws\n", applicationName.c_str(), info->ProcessId, commandline.c_str());
+                printf("Process %ws : %d Created.\n\t\tCommand Line: %ws\n", applicationName.c_str(), info->ProcessId, commandline.c_str());
+
+                Process node;
+                node.ProcessId = info->ProcessId;
+                node.ImageName = applicationName;
+                ProcessList.insert(node);
+                
                 break;
             }
+            
+            case ItemType::ThreadCreate:
+            {
+                DisplayTime(header->Time);
+                auto info = (ThreadCreateExitInfo*)buffer;
+                Process temp = { info->ProcessId, L"" };
+                Node<Process>* procPtr = ProcessList.retreiveNode(temp);
+                if (procPtr != nullptr)
+                {
+                    printf("Process %ws : %d Created a Thread: %d\n", procPtr->data.ImageName.c_str(), info->ProcessId, info->ThreadId);
+                }
+                else
+                {
+                    printf("Thread %d Created in Process %d\n", info->ThreadId, info->ProcessId);
+                }
+                break;
+            }
+            case ItemType::ThreadExit:
+            {
+                DisplayTime(header->Time);
+                auto info = (ThreadCreateExitInfo*)buffer;
+                Process temp = { info->ProcessId, L"" };
+                Node<Process>* procPtr = ProcessList.retreiveNode(temp);
+                if (procPtr != nullptr)
+                {
+                    printf("Process %ws : %d Exited a Thread: %d\n", procPtr->data.ImageName.c_str(), info->ProcessId, info->ThreadId);
+                }
+                else
+                {
+                    printf("Thread %d Exit in Process %d\n", info->ThreadId, info->ProcessId);
+                }
+                break;
+            }
+            case ItemType::ImageLoad:
+            {
+                DisplayTime(header->Time);
+                auto info = (ImageLoadInfo*)buffer;
+                Process temp = { info->ProcessId, L"" };
+                Node<Process>* procPtr = ProcessList.retreiveNode(temp);
+                if (procPtr != nullptr)
+                {
+                    std::wstring imagename((WCHAR*)(buffer + info->ImageNameOffset), info->ImageNameLength);
+                    printf("Process %ws : %d loaded image: %ws at loc: 0x%08X\n", procPtr->data.ImageName.c_str(), info->ProcessId, imagename.c_str(), info->ImageBase);
+                }
+            }
+            
             default:
                 break;
         }
@@ -84,5 +148,5 @@ void DisplayTime(const LARGE_INTEGER& time)
 {
     SYSTEMTIME st;
     ::FileTimeToSystemTime((FILETIME*)&time, &st);
-    printf("%02d:%02d:%02d.%03d: ", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+    printf("[*] %02d:%02d:%02d.%03d: ", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
 }

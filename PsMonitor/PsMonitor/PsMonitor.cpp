@@ -12,6 +12,8 @@ void PsMonitorUnload(PDRIVER_OBJECT DriverObject);
 DRIVER_DISPATCH PsMonitorRead, PsMonitorCreateClose;
 NTSTATUS CompleteIrp(PIRP irp, NTSTATUS, ULONG_PTR);
 void OnProcessNotify(PEPROCESS, HANDLE, PPS_CREATE_NOTIFY_INFO);
+void OnThreadNotify(HANDLE ProcessId, HANDLE ThreadId, BOOLEAN Create);
+void OnImageLoadNotify(PUNICODE_STRING FullImageName, HANDLE ProcessId, PIMAGE_INFO ImageInfo);
 
 extern "C" NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject, _In_ PUNICODE_STRING) {
 	auto status = STATUS_SUCCESS;
@@ -39,7 +41,8 @@ extern "C" NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject, _In_ PUNICODE_
 		KdPrint(("Error attempting to open registry key 0x%08X", status));
 		return status;
 	}
-
+	/*
+	
 	ULONG bufferSize = 0;
 	PKEY_VALUE_PARTIAL_INFORMATION pValueInfo = NULL;
 	UNICODE_STRING maxItems;
@@ -79,6 +82,8 @@ extern "C" NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject, _In_ PUNICODE_
 	}
 
 	ZwClose(maxValueKey);
+	*/
+	g_Globals.MaxItems = 10000;
 
 	PDEVICE_OBJECT DeviceObject = nullptr;
 	UNICODE_STRING symLink = RTL_CONSTANT_STRING(L"\\??\\psmonitor");
@@ -111,6 +116,19 @@ extern "C" NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject, _In_ PUNICODE_
 		if (!NT_SUCCESS(status))
 		{
 			KdPrint(("Failure to register function for process creation | deletion notifications 0x%08X\n", status));
+			break;
+		}
+
+		status = PsSetCreateThreadNotifyRoutine(OnThreadNotify);
+		if (!NT_SUCCESS(status))
+		{
+			KdPrint(("Failure to register function for thread creation | deletion notifications 0x%08X\n", status));
+			break;
+		}
+		status = PsSetLoadImageNotifyRoutine(OnImageLoadNotify);
+		if (!NT_SUCCESS(status))
+		{
+			KdPrint(("Failure to register function for image loading notifications 0x%08X\n", status));
 			break;
 		}
 
@@ -232,12 +250,64 @@ void OnProcessNotify(PEPROCESS Process, HANDLE ProcessId, PPS_CREATE_NOTIFY_INFO
 	}
 }
 
+void OnThreadNotify(HANDLE ProcessId, HANDLE ThreadId, BOOLEAN Create)
+{
+	auto size = sizeof(FullItem<ThreadCreateExitInfo>);
+	auto info = (FullItem<ThreadCreateExitInfo>*)ExAllocatePool2(POOL_FLAG_PAGED, size, DRIVER_TAG);
+	if (info == nullptr)
+	{
+		KdPrint(("Failed to allocate memory for thread creation information\n"));
+		return;
+
+	}
+
+	auto& item = info->Data;
+	KeQuerySystemTimePrecise(&item.Time);
+	item.size = sizeof(item);
+	item.Type = Create ? ItemType::ThreadCreate : ItemType::ThreadExit;
+	item.ProcessId = HandleToULong(ProcessId);
+	item.ThreadId = HandleToULong(ThreadId);
+	
+	PushItem(&info->Entry);
+}
+
+void OnImageLoadNotify(PUNICODE_STRING FullImageName, HANDLE ProcessId, PIMAGE_INFO ImageInfo)
+{
+	if (!ImageInfo->SystemModeImage)
+	{
+		auto size = sizeof(FullItem<ImageLoadInfo>);
+		auto info = (FullItem<ImageLoadInfo>*)ExAllocatePool2(POOL_FLAG_PAGED, size + FullImageName->Length, DRIVER_TAG);
+		if (info == nullptr)
+		{
+			KdPrint(("Failed to allocate memory for image load information\n"));
+			return;
+		}
+
+		auto& item = info->Data;
+		item.ImageNameLength = FullImageName->Length;
+		item.ImageNameOffset = sizeof(FullItem<ImageLoadInfo>);
+		item.ProcessId = HandleToULong(ProcessId);
+		item.ImageBase = ImageInfo->ImageBase;
+		item.size = sizeof(ImageLoadInfo);
+		item.Type = ItemType::ImageLoad;
+		if (FullImageName->Length > 0)
+		{
+			::memcpy((UCHAR*)&item + sizeof(item), FullImageName->Buffer, FullImageName->Length);
+			item.size += FullImageName->Length;
+		}
+
+		PushItem(&info->Entry);
+	}
+	
+}
+
+
 NTSTATUS PsMonitorRead(PDEVICE_OBJECT, PIRP irp)
 {
 	auto stack = IoGetCurrentIrpStackLocation(irp);
 	auto len = stack->Parameters.Read.Length;
 	auto status = STATUS_SUCCESS;
-	auto count = 0;
+	auto bytes = 0;
 	NT_ASSERT(irp->MdlAddress); //were using direct IO
 
 	auto buffer = (UCHAR*)MmGetSystemAddressForMdlSafe(irp->MdlAddress, NormalPagePriority);
@@ -267,7 +337,7 @@ NTSTATUS PsMonitorRead(PDEVICE_OBJECT, PIRP irp)
 			::memcpy(buffer, &info->Data, size);
 			len -= size;
 			buffer += size;
-			count += size;
+			bytes += size;
 
 			//free data after the copy.
 			ExFreePool(info);
@@ -276,13 +346,15 @@ NTSTATUS PsMonitorRead(PDEVICE_OBJECT, PIRP irp)
 
 	}
 
-	return CompleteIrp(irp, status, count);
+	return CompleteIrp(irp, status, bytes);
 }
 
 void PsMonitorUnload(PDRIVER_OBJECT DriverObject)
 {
 	//unregister the callback routine.
 	PsSetCreateProcessNotifyRoutineEx(OnProcessNotify, TRUE);
+	PsRemoveCreateThreadNotifyRoutine(OnThreadNotify);
+	PsRemoveLoadImageNotifyRoutine(OnImageLoadNotify);
 
 	UNICODE_STRING symLink = RTL_CONSTANT_STRING(L"\\??\\psmonitor");
 	IoDeleteSymbolicLink(&symLink);
