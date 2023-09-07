@@ -12,4 +12,5 @@ struct Globals {
 	ULONG ItemCount;
 	FastMutex Mutex;
 	ULONG MaxItems;
+	WCHAR ExcludedPath[256];
 };

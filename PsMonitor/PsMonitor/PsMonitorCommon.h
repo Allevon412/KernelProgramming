@@ -1,5 +1,6 @@
 #pragma once
 
+#define MAXIMUM_PATH_LENGTH 256
 
 enum class ItemType : short {
 	None,

@@ -9,7 +9,7 @@
 Globals g_Globals;
 
 void PsMonitorUnload(PDRIVER_OBJECT DriverObject);
-DRIVER_DISPATCH PsMonitorRead, PsMonitorCreateClose;
+DRIVER_DISPATCH PsMonitorRead, PsMonitorCreateClose, PsMonitorWrite;
 NTSTATUS CompleteIrp(PIRP irp, NTSTATUS, ULONG_PTR);
 void OnProcessNotify(PEPROCESS, HANDLE, PPS_CREATE_NOTIFY_INFO);
 void OnThreadNotify(HANDLE ProcessId, HANDLE ThreadId, BOOLEAN Create);
@@ -22,6 +22,7 @@ extern "C" NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject, _In_ PUNICODE_
 	DriverObject->DriverUnload = PsMonitorUnload;
 	DriverObject->MajorFunction[IRP_MJ_CREATE] = DriverObject->MajorFunction[IRP_MJ_CLOSE] = PsMonitorCreateClose;
 	DriverObject->MajorFunction[IRP_MJ_READ] = PsMonitorRead;
+	DriverObject->MajorFunction[IRP_MJ_WRITE] = PsMonitorWrite;
 
 	//initialize our global variables. List first node + our lock on the list.
 	InitializeListHead(&g_Globals.ItemsHead);
@@ -194,6 +195,31 @@ void OnProcessNotify(PEPROCESS Process, HANDLE ProcessId, PPS_CREATE_NOTIFY_INFO
 		}
 
 
+		//check to see if process execution happens from an excluded path.
+		// make sure commandline isn't null.
+		if (CreateInfo->CommandLine)
+		{
+			//make sure that the excludedPath has been set by usermode code.
+			if (g_Globals.ExcludedPath[0] != L'\0')
+			{
+				UNICODE_STRING tempExcludedPath;
+				UNICODE_STRING tempCurrentPath;
+				RtlInitUnicodeString(&tempExcludedPath, g_Globals.ExcludedPath);
+				RtlInitUnicodeString(&tempCurrentPath, CreateInfo->CommandLine->Buffer);
+				tempCurrentPath.Buffer++; // get rid of the leading " character.
+				tempCurrentPath.Length = tempExcludedPath.Length;
+				if (RtlCompareUnicodeString(&tempExcludedPath, &tempCurrentPath, TRUE) == 0)
+				{
+					KdPrint(("A process was attempted to start from an excluded path. Skipping adding to process monitor queue"));
+					CreateInfo->CreationStatus = STATUS_ACCESS_DENIED;
+					return;
+				}
+			}
+			
+			
+		}
+		
+
 		//obtain the static process information.
 		auto& item = info->Data;
 		KeQuerySystemTimePrecise(&item.Time);
@@ -316,7 +342,7 @@ NTSTATUS PsMonitorRead(PDEVICE_OBJECT, PIRP irp)
 		status = STATUS_INSUFFICIENT_RESOURCES;
 	}
 	else {
-		//access our linked list and pull itesm from the head.
+		//access our linked list and pull items from the head.
 		AutoLock lock(g_Globals.Mutex);
 		while (true)
 		{
@@ -379,4 +405,38 @@ NTSTATUS CompleteIrp(PIRP irp, NTSTATUS status = STATUS_SUCCESS, ULONG_PTR info 
 NTSTATUS PsMonitorCreateClose(PDEVICE_OBJECT, PIRP Irp)
 {
 	return CompleteIrp(Irp);
+}
+
+NTSTATUS PsMonitorWrite(PDEVICE_OBJECT, PIRP Irp)
+{
+	auto stack = IoGetCurrentIrpStackLocation(Irp);
+	auto status = STATUS_SUCCESS;
+
+	auto len = stack->Parameters.Write.Length;
+	NT_ASSERT(Irp->MdlAddress);
+
+	KdPrint(("Trying to obtain buffer from usermode code"));
+
+	if (len <= 0)
+	{
+		return CompleteIrp(Irp, STATUS_INVALID_BUFFER_SIZE);
+	}
+	if (len > 256)
+	{
+		return CompleteIrp(Irp, STATUS_INVALID_BUFFER_SIZE);
+	}
+
+	auto buffer = MmGetSystemAddressForMdlSafe(Irp->MdlAddress, NormalPagePriority);
+	if (!buffer)
+	{
+		return CompleteIrp(Irp, STATUS_INSUFFICIENT_RESOURCES);
+	}
+	else
+	{
+		AutoLock lock(g_Globals.Mutex);
+		
+		::memcpy(g_Globals.ExcludedPath, buffer, len);
+	}
+
+	return CompleteIrp(Irp, status, len);
 }

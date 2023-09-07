@@ -46,7 +46,7 @@ int main()
 		printf("Wrong data\n");
 	}
 
-	BYTE buffer2[1024];
+	wchar_t buffer2[1024] = L"TESTING!";
 	ok = ::WriteFile(hDevice, buffer2, sizeof(buffer2), &bytes, nullptr);
 	if (!ok)
 		return Error("failed to write");

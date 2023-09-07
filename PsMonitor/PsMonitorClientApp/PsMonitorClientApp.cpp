@@ -20,11 +20,17 @@ void DisplayTime(const LARGE_INTEGER& time);
 
 int main()
 {
-    auto hFile = ::CreateFile(L"\\\\.\\psmonitor", GENERIC_READ, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+    auto hFile = ::CreateFile(L"\\\\.\\psmonitor", GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
     if (hFile == INVALID_HANDLE_VALUE)
     {
         return Error("Failed to Open File");
     }
+    
+    WCHAR exclusionPath[] = L"C:\\Users\\Breadman\\Downloads";
+    DWORD bytes;
+
+    if (!::WriteFile(hFile, exclusionPath, sizeof(exclusionPath), &bytes, nullptr))
+        return Error("Failure to send exclusionpath to driver");
 
     BYTE buffer[1 << 16]; // 64KB buffer.
     while (true)
