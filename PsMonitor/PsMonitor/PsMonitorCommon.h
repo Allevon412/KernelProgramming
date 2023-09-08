@@ -34,6 +34,9 @@ struct ThreadCreateExitInfo : ItemHeader
 {
 	ULONG ProcessId;
 	ULONG ThreadId;
+	bool remote;
+	ULONG CreateProcessId;
+	ULONG CreatorThreadId;
 };
 
 struct ImageLoadInfo : ItemHeader

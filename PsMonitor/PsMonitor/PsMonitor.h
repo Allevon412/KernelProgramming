@@ -14,3 +14,11 @@ struct Globals {
 	ULONG MaxItems;
 	WCHAR ExcludedPath[256];
 };
+
+const ULONG MaxNewProcesses = 32;
+
+struct newProcGlobalList {
+	FastMutex Mutex;
+	ULONG NewProcesses[MaxNewProcesses];
+	ULONG count;
+};

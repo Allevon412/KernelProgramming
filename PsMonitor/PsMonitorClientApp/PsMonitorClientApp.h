@@ -91,12 +91,11 @@ public:
 		{
 
 			current = current->next;
-			//return found node.
-			return current;
+			
 		}
 
-		//otherwise node is not found.
-		return nullptr;
+		//will return valid process object or nullptr if not found.
+		return current;
 
 	}
 

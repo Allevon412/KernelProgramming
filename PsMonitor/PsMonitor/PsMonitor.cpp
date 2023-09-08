@@ -7,6 +7,7 @@
 #define DRIVER_PREFIX "PsMonitor: "
 
 Globals g_Globals;
+newProcGlobalList g_NewProcList;
 
 void PsMonitorUnload(PDRIVER_OBJECT DriverObject);
 DRIVER_DISPATCH PsMonitorRead, PsMonitorCreateClose, PsMonitorWrite;
@@ -14,6 +15,9 @@ NTSTATUS CompleteIrp(PIRP irp, NTSTATUS, ULONG_PTR);
 void OnProcessNotify(PEPROCESS, HANDLE, PPS_CREATE_NOTIFY_INFO);
 void OnThreadNotify(HANDLE ProcessId, HANDLE ThreadId, BOOLEAN Create);
 void OnImageLoadNotify(PUNICODE_STRING FullImageName, HANDLE ProcessId, PIMAGE_INFO ImageInfo);
+bool AddNewProcess(HANDLE pid);
+bool FindProcess(HANDLE pid);
+bool RemoveProcess(HANDLE pid);
 
 extern "C" NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject, _In_ PUNICODE_STRING) {
 	auto status = STATUS_SUCCESS;
@@ -27,63 +31,8 @@ extern "C" NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject, _In_ PUNICODE_
 	//initialize our global variables. List first node + our lock on the list.
 	InitializeListHead(&g_Globals.ItemsHead);
 	g_Globals.Mutex.Init();
-	HANDLE maxValueKey;
-	OBJECT_ATTRIBUTES objectAttributes;
-	UNICODE_STRING regPath;
+	g_NewProcList.Mutex.Init();
 	
-	
-	RtlInitUnicodeString(&regPath, L"\\Registry\\Machine\\System\\CurrentControlSet\\Services\\PsMonitor");
-	InitializeObjectAttributes(&objectAttributes, &regPath, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
-
-
-	status = ZwOpenKey(&maxValueKey, KEY_READ, &objectAttributes);
-	if (!NT_SUCCESS(status))
-	{
-		KdPrint(("Error attempting to open registry key 0x%08X", status));
-		return status;
-	}
-	/*
-	
-	ULONG bufferSize = 0;
-	PKEY_VALUE_PARTIAL_INFORMATION pValueInfo = NULL;
-	UNICODE_STRING maxItems;
-	RtlInitUnicodeString(&maxItems, L"MaxItems");
-	pValueInfo = (PKEY_VALUE_PARTIAL_INFORMATION)ExAllocatePool2(POOL_FLAG_PAGED, sizeof(KEY_VALUE_PARTIAL_INFORMATION), DRIVER_TAG);
-
-	status = ZwQueryValueKey(maxValueKey, &maxItems, KeyValuePartialInformation, nullptr, 0, &bufferSize);
-	if (status == STATUS_BUFFER_TOO_SMALL || status == STATUS_BUFFER_OVERFLOW)
-	{
-		pValueInfo = (PKEY_VALUE_PARTIAL_INFORMATION)ExAllocatePool2(POOL_FLAG_PAGED, bufferSize, DRIVER_TAG);
-		if (pValueInfo)
-		{
-			status = ZwQueryValueKey(maxValueKey, &maxItems, KeyValuePartialInformation, pValueInfo, bufferSize, &bufferSize);
-			if (!NT_SUCCESS(status))
-			{
-				KdPrint(("Failed to query registry value: 0x%08X\n", status));
-			}
-			UNICODE_STRING maxItemsValue;
-			RtlInitUnicodeString(&maxItemsValue, (PCWSTR)pValueInfo->Data);
-
-			status = RtlUnicodeStringToInteger(&maxItemsValue, 10, &g_Globals.MaxItems);
-			if (!NT_SUCCESS(status)) {
-				KdPrint(("Failed to convert Maximum item count to Integer: 0x%08X\n", status));
-			}
-			//if all succeeds
-			ExFreePoolWithTag(pValueInfo, DRIVER_TAG);
-		}
-		else
-		{
-			KdPrint(("Failed to allocate memory\n"));
-			status = STATUS_INSUFFICIENT_RESOURCES;
-		}
-	}
-	else
-	{
-		g_Globals.MaxItems = 1024;
-	}
-
-	ZwClose(maxValueKey);
-	*/
 	g_Globals.MaxItems = 10000;
 
 	PDEVICE_OBJECT DeviceObject = nullptr;
@@ -215,10 +164,13 @@ void OnProcessNotify(PEPROCESS Process, HANDLE ProcessId, PPS_CREATE_NOTIFY_INFO
 					return;
 				}
 			}
-			
-			
 		}
-		
+
+		//add process to the new process entry list.
+		if (!AddNewProcess(ProcessId))
+		{
+			KdPrint(("New Process Created, but no room to store.\n"));
+		}
 
 		//obtain the static process information.
 		auto& item = info->Data;
@@ -278,23 +230,67 @@ void OnProcessNotify(PEPROCESS Process, HANDLE ProcessId, PPS_CREATE_NOTIFY_INFO
 
 void OnThreadNotify(HANDLE ProcessId, HANDLE ThreadId, BOOLEAN Create)
 {
-	auto size = sizeof(FullItem<ThreadCreateExitInfo>);
-	auto info = (FullItem<ThreadCreateExitInfo>*)ExAllocatePool2(POOL_FLAG_PAGED, size, DRIVER_TAG);
-	if (info == nullptr)
+	if (Create) // thread creation notification.
 	{
-		KdPrint(("Failed to allocate memory for thread creation information\n"));
-		return;
+		auto size = sizeof(FullItem<ThreadCreateExitInfo>);
+		auto info = (FullItem<ThreadCreateExitInfo>*)ExAllocatePool2(POOL_FLAG_PAGED, size, DRIVER_TAG);
+		if (info == nullptr)
+		{
+			KdPrint(("Failed to allocate memory for thread creation information\n"));
+			return;
+		}
+		auto& item = info->Data;
+		item.remote = false;
+		do //give us a way to break out of certain features.
+		{
+			HANDLE currProcess = PsGetCurrentProcessId();
+			if (currProcess != ProcessId && PsInitialSystemProcess != PsGetCurrentProcess() && PsGetProcessId(PsInitialSystemProcess) != ProcessId) //check to ensure that the process is not the system process (4) and is not equal to the current process is not equal to the processId.
+			{
+				bool found = FindProcess(ProcessId);
+				if (found)
+				{
+					//if it's found then we have found first thread from starting a process. Remove it. "considered current process as parent process for new process starting."
+					RemoveProcess(ProcessId);
+					break;
+				}
+				//if it's not found then we have a truly remote thread.
+				item.remote = true;
 
+				item.CreateProcessId = HandleToULong(PsGetCurrentProcessId());
+				item.CreatorThreadId = HandleToULong(PsGetCurrentThreadId());
+			}
+		} while (false);
+		
+		KeQuerySystemTimePrecise(&item.Time);
+		item.size = sizeof(item);
+		item.Type = Create ? ItemType::ThreadCreate : ItemType::ThreadExit;
+		item.ProcessId = HandleToULong(ProcessId);
+		item.ThreadId = HandleToULong(ThreadId);
+		
+
+		PushItem(&info->Entry);
+		
 	}
+	else // thread exiting notification.
+	{
+		auto size = sizeof(FullItem<ThreadCreateExitInfo>);
+		auto info = (FullItem<ThreadCreateExitInfo>*)ExAllocatePool2(POOL_FLAG_PAGED, size, DRIVER_TAG);
+		if (info == nullptr)
+		{
+			KdPrint(("Failed to allocate memory for thread creation information\n"));
+			return;
+		}
 
-	auto& item = info->Data;
-	KeQuerySystemTimePrecise(&item.Time);
-	item.size = sizeof(item);
-	item.Type = Create ? ItemType::ThreadCreate : ItemType::ThreadExit;
-	item.ProcessId = HandleToULong(ProcessId);
-	item.ThreadId = HandleToULong(ThreadId);
-	
-	PushItem(&info->Entry);
+		auto& item = info->Data;
+		KeQuerySystemTimePrecise(&item.Time);
+		item.size = sizeof(item);
+		item.Type = Create ? ItemType::ThreadCreate : ItemType::ThreadExit;
+		item.ProcessId = HandleToULong(ProcessId);
+		item.ThreadId = HandleToULong(ThreadId);
+		item.remote = false;
+
+		PushItem(&info->Entry);
+	}
 }
 
 void OnImageLoadNotify(PUNICODE_STRING FullImageName, HANDLE ProcessId, PIMAGE_INFO ImageInfo)
@@ -439,4 +435,53 @@ NTSTATUS PsMonitorWrite(PDEVICE_OBJECT, PIRP Irp)
 	}
 
 	return CompleteIrp(Irp, status, len);
+}
+
+
+bool AddNewProcess(HANDLE pid)
+{
+	AutoLock lock(g_NewProcList.Mutex);
+	if (g_NewProcList.count == MaxNewProcesses)
+		return false;
+
+	for (int i = 0; i < MaxNewProcesses; i++)
+	{
+		if (g_NewProcList.NewProcesses[i] == 0)
+		{
+			g_NewProcList.NewProcesses[i] = HandleToULong(pid);
+			break;
+		}
+	}
+	g_NewProcList.count++;
+	return true;
+}
+
+bool RemoveProcess(HANDLE pid)
+{
+	AutoLock lock(g_NewProcList.Mutex);
+
+	for (int i = 0; i < MaxNewProcesses; i++)
+	{
+		if (g_NewProcList.NewProcesses[i] == HandleToULong(pid))
+		{
+			g_NewProcList.NewProcesses[i] = 0;
+			g_NewProcList.count--;
+			return true;
+		}
+	}
+	return false;
+}
+
+bool FindProcess(HANDLE pid)
+{
+	AutoLock lock(g_NewProcList.Mutex);
+
+	for (int i = 0; i < MaxNewProcesses; i++)
+	{
+		if (g_NewProcList.NewProcesses[i] == HandleToULong(pid))
+		{
+			return true;
+		}
+	}
+	return false;
 }

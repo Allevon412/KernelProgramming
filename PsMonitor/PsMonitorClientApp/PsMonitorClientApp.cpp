@@ -6,6 +6,7 @@
 #include "PsMonitorClientApp.h"
 
 
+
 LinkedList<Process> ProcessList;
 //implementation of linkedlist failed becaus i forgot to realize that the processes that already exist on the system will cause a crash when attempting to remove them 
 
@@ -17,9 +18,11 @@ int Error(const char* message)
 
 void DisplayInfo(BYTE* buffer, DWORD size);
 void DisplayTime(const LARGE_INTEGER& time);
+void populateProcessList();
 
 int main()
 {
+    populateProcessList();
     auto hFile = ::CreateFile(L"\\\\.\\psmonitor", GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
     if (hFile == INVALID_HANDLE_VALUE)
     {
@@ -101,22 +104,43 @@ void DisplayInfo(BYTE* buffer, DWORD size)
             {
                 DisplayTime(header->Time);
                 auto info = (ThreadCreateExitInfo*)buffer;
-                Process temp = { info->ProcessId, L"" };
-                Node<Process>* procPtr = ProcessList.retreiveNode(temp);
-                if (procPtr != nullptr)
+                if (info->remote == false)
                 {
-                    printf("Process %ws : %d Created a Thread: %d\n", procPtr->data.ImageName.c_str(), info->ProcessId, info->ThreadId);
+                    Process temp = { info->ProcessId, L"" };
+                    Node<Process>* procPtr = ProcessList.retreiveNode(temp);
+                    if (procPtr != nullptr)
+                    {
+                        printf("Process %ws : %d Created a Thread: %d\n", procPtr->data.ImageName.c_str(), info->ProcessId, info->ThreadId);
+                    }
+                    else
+                    {
+                        printf("Thread %d Created in Process %d\n", info->ThreadId, info->ProcessId);
+                    }
+                    break;
                 }
                 else
                 {
-                    printf("Thread %d Created in Process %d\n", info->ThreadId, info->ProcessId);
+                    Process temp = { info->CreateProcessId, L"" };
+                    Process temp2 = { info->ProcessId, L"" };
+                    Node<Process>* procPtr = ProcessList.retreiveNode(temp);
+                    Node<Process>* procPtr2 = ProcessList.retreiveNode(temp2);
+                    if (procPtr != nullptr)
+                    {
+                        printf("Thread %d in Process %ws : %d created a remote thread %d in process %ws : %d\n", info->CreatorThreadId, procPtr->data.ImageName.c_str(), info->CreateProcessId, info->ThreadId, procPtr2->data.ImageName.c_str(), info->ProcessId);
+                    }
+                    else
+                    {
+                        printf("Thread %d in process %d created a remote thread %d in process %d\n", info->CreatorThreadId, info->CreateProcessId, info->ThreadId, info->ProcessId);
+                    }
+                    break;
                 }
-                break;
+               
             }
             case ItemType::ThreadExit:
             {
                 DisplayTime(header->Time);
                 auto info = (ThreadCreateExitInfo*)buffer;
+               
                 Process temp = { info->ProcessId, L"" };
                 Node<Process>* procPtr = ProcessList.retreiveNode(temp);
                 if (procPtr != nullptr)
@@ -128,6 +152,7 @@ void DisplayInfo(BYTE* buffer, DWORD size)
                     printf("Thread %d Exit in Process %d\n", info->ThreadId, info->ProcessId);
                 }
                 break;
+              
             }
             case ItemType::ImageLoad:
             {
@@ -155,4 +180,27 @@ void DisplayTime(const LARGE_INTEGER& time)
     SYSTEMTIME st;
     ::FileTimeToSystemTime((FILETIME*)&time, &st);
     printf("[*] %02d:%02d:%02d.%03d: ", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+}
+
+void populateProcessList()
+{
+    DWORD procId = 0;
+    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnap != INVALID_HANDLE_VALUE)
+    {
+        PROCESSENTRY32W procEntry;
+        procEntry.dwSize = sizeof(PROCESSENTRY32W);
+
+        if (Process32First(hSnap, &procEntry))
+        {
+            do {
+
+                Process proc;
+                proc.ImageName = procEntry.szExeFile;
+                proc.ProcessId = procEntry.th32ProcessID;
+                ProcessList.insert(proc);
+
+            } while (Process32Next(hSnap, &procEntry));
+        }
+    }
 }
