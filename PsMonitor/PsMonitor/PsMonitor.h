@@ -13,6 +13,7 @@ struct Globals {
 	FastMutex Mutex;
 	ULONG MaxItems;
 	WCHAR ExcludedPath[256];
+	LARGE_INTEGER RegCookie;
 };
 
 const ULONG MaxNewProcesses = 32;

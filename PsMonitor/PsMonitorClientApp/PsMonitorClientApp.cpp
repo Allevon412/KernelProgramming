@@ -19,6 +19,7 @@ int Error(const char* message)
 void DisplayInfo(BYTE* buffer, DWORD size);
 void DisplayTime(const LARGE_INTEGER& time);
 void populateProcessList();
+void DisplayBinary(const UCHAR* buffer, DWORD size);
 
 int main()
 {
@@ -166,7 +167,32 @@ void DisplayInfo(BYTE* buffer, DWORD size)
                     printf("Process %ws : %d loaded image: %ws at loc: 0x%08X\n", procPtr->data.ImageName.c_str(), info->ProcessId, imagename.c_str(), info->ImageBase);
                 }
             }
-            
+
+            case ItemType::RegistrySetValue:
+            {
+                DisplayTime(header->Time);
+                auto info = (RegistrYSetValueInfo *) buffer;
+                printf("Registry write PID=%d: %ws\\%ws type: %d size: %d data: ", info->ProcessId, info->KeyName, info->ValueName, info->DataType, info->DataSize);
+
+                switch (info->DataType)
+                {
+                case REG_DWORD:
+                    printf("0x%08X\n", *(DWORD*)info->Data);
+                    break;
+                case REG_SZ:
+                case REG_EXPAND_SZ:
+                    printf("%ws\n", (WCHAR*)info->Data);
+                    break;
+                case REG_BINARY:
+                    DisplayBinary(info->Data, min(info->DataSize, sizeof(info->Data)));
+                    break;
+                default:
+                    DisplayBinary(info->Data, min(info->DataSize, sizeof(info->Data)));
+                    break;
+                }
+                break;
+            }
+
             default:
                 break;
         }
@@ -203,4 +229,12 @@ void populateProcessList()
             } while (Process32Next(hSnap, &procEntry));
         }
     }
+}
+
+void DisplayBinary(const UCHAR* buffer, DWORD size)
+{
+    for (DWORD i = 0; i < size; i++) {
+        printf("%02X ", buffer[i]);
+    }
+    printf("\n");
 }

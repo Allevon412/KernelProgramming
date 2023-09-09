@@ -1,8 +1,9 @@
 ﻿  Building 'PsMonitor' with toolset 'WindowsKernelModeDriver10.0' and the 'Desktop' target platform.
+  pch.cpp
+  FastMutex.cpp
   PsMonitor.cpp
-  PsMonitor.vcxproj -> C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\PsMonitor\x64\Debug\PsMonitor.sys
-  Done Adding Additional Store
-  Successfully signed: C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\PsMonitor\x64\Debug\PsMonitor.sys
-  
-  Inf2Cat task was skipped as there were no inf files to process
-  
+C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\PsMonitor\PsMonitor\PsMonitor.cpp(464,8): error C2664: 'NTSTATUS CmCallbackGetKeyObjectIDEx(PLARGE_INTEGER,PVOID,PULONG_PTR,PCUNICODE_STRING *,ULONG)': cannot convert argument 4 from 'PUNICODE_STRING *' to 'PCUNICODE_STRING *'
+C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\PsMonitor\PsMonitor\PsMonitor.cpp(464,8): message : Conversion loses qualifiers
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\km\wdm.h(27776,1): message : see declaration of 'CmCallbackGetKeyObjectIDEx'
+C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\PsMonitor\PsMonitor\PsMonitor.cpp(464,8): message : while trying to match the argument list '(LARGE_INTEGER *, PVOID, nullptr, PUNICODE_STRING *, int)'
+  Generating Code...

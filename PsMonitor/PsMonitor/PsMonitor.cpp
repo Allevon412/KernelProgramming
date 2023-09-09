@@ -12,6 +12,7 @@ newProcGlobalList g_NewProcList;
 void PsMonitorUnload(PDRIVER_OBJECT DriverObject);
 DRIVER_DISPATCH PsMonitorRead, PsMonitorCreateClose, PsMonitorWrite;
 NTSTATUS CompleteIrp(PIRP irp, NTSTATUS, ULONG_PTR);
+NTSTATUS OnRegistryNotify(PVOID context, PVOID arg1, PVOID arg2);
 void OnProcessNotify(PEPROCESS, HANDLE, PPS_CREATE_NOTIFY_INFO);
 void OnThreadNotify(HANDLE ProcessId, HANDLE ThreadId, BOOLEAN Create);
 void OnImageLoadNotify(PUNICODE_STRING FullImageName, HANDLE ProcessId, PIMAGE_INFO ImageInfo);
@@ -81,6 +82,14 @@ extern "C" NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject, _In_ PUNICODE_
 			KdPrint(("Failure to register function for image loading notifications 0x%08X\n", status));
 			break;
 		}
+		UNICODE_STRING altitude = RTL_CONSTANT_STRING(L"7657.124");
+		status = CmRegisterCallbackEx(OnRegistryNotify, &altitude, DriverObject, nullptr, &g_Globals.RegCookie, nullptr);
+		if (!NT_SUCCESS(status))
+		{
+			KdPrint(("Failed to set registery callback 0x%08X\n", status));
+			break;
+		}
+
 
 	} while (false);
 
@@ -101,7 +110,7 @@ extern "C" NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject, _In_ PUNICODE_
 
 void PushItem(LIST_ENTRY* entry)
 {
-	AutoLock<FastMutex> lock(g_Globals.Mutex);
+	AutoLock locker(g_Globals.Mutex);
 	if (g_Globals.ItemCount > g_Globals.MaxItems) //better to have the 1024 number read from the registry in the driver's service key.
 	{
 		//too many items in list removed the oldest one.
@@ -377,6 +386,7 @@ void PsMonitorUnload(PDRIVER_OBJECT DriverObject)
 	PsSetCreateProcessNotifyRoutineEx(OnProcessNotify, TRUE);
 	PsRemoveCreateThreadNotifyRoutine(OnThreadNotify);
 	PsRemoveLoadImageNotifyRoutine(OnImageLoadNotify);
+	CmUnRegisterCallback(g_Globals.RegCookie);
 
 	UNICODE_STRING symLink = RTL_CONSTANT_STRING(L"\\??\\psmonitor");
 	IoDeleteSymbolicLink(&symLink);
@@ -435,6 +445,60 @@ NTSTATUS PsMonitorWrite(PDEVICE_OBJECT, PIRP Irp)
 	}
 
 	return CompleteIrp(Irp, status, len);
+}
+
+NTSTATUS OnRegistryNotify(PVOID context, PVOID arg1, PVOID arg2)
+{
+	UNREFERENCED_PARAMETER(context);
+
+	switch ((REG_NOTIFY_CLASS)(ULONG_PTR)arg1)
+	{
+		case RegNtPostSetValueKey:
+		{
+			auto args = (REG_POST_OPERATION_INFORMATION*)arg2;
+			if (!NT_SUCCESS(args->Status))
+				break;
+
+			static const WCHAR machine[] = L"\\REGISTRY\\MACHINE\\";
+			PUNICODE_STRING name;
+			if (NT_SUCCESS(CmCallbackGetKeyObjectIDEx(&g_Globals.RegCookie, args->Object, nullptr, &name, 0)))
+			{
+				//filter out none-HKLM writes
+				if (::wcsncmp(name->Buffer, machine, ARRAYSIZE(machine) - 1) == 0)
+				{
+					auto preInfo = (REG_SET_VALUE_KEY_INFORMATION*)args->PreInformation;
+					NT_ASSERT(preInfo);
+
+					auto size = sizeof(FullItem<RegistrYSetValueInfo>);
+					auto info = (FullItem<RegistrYSetValueInfo>*)ExAllocatePool2(POOL_FLAG_PAGED, size, DRIVER_TAG);
+					if (info == nullptr)
+						break;
+
+					RtlZeroMemory(info, size);
+
+					auto& item = info->Data;
+					KeQuerySystemTimePrecise(&item.Time);
+					item.size = sizeof(item);
+					item.Type = ItemType::RegistrySetValue;
+
+					item.ProcessId = HandleToULong(PsGetCurrentProcessId());
+					item.ThreadId = HandleToULong(PsGetCurrentThreadId());
+
+					::wcsncpy_s(item.KeyName, name->Buffer, name->Length / sizeof(WCHAR) - 1);
+					::wcsncpy_s(item.ValueName, preInfo->ValueName->Buffer, preInfo->ValueName->Length / sizeof(WCHAR) -1);
+					item.DataType = preInfo->Type;
+					item.DataSize = preInfo->DataSize;
+					::memcpy(item.Data, preInfo->Data, min(item.DataSize, sizeof(item.Data)));
+
+					PushItem(&info->Entry);
+				}
+				CmCallbackReleaseKeyObjectIDEx(name);
+			}
+
+			break;
+		}
+	}
+	return STATUS_SUCCESS;
 }
 
 

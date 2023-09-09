@@ -50,8 +50,8 @@ public:
 		Length++;
 	}
 
-
-	/*void Display()
+	/*
+	void Display()
 	{
 		Node<T>* current = head;
 		while (current)
@@ -59,8 +59,9 @@ public:
 			std::count << current->data << " ";
 			current = current->next;
 		}
-		std::count << std:;
-	}*/
+		std::count << std::endl;
+	}
+	*/
 
 	~LinkedList()
 	{

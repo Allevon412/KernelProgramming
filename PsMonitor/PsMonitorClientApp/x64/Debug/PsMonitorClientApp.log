@@ -1,5 +1,5 @@
 ﻿  PsMonitorClientApp.cpp
-C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\PsMonitor\PsMonitorClientApp\PsMonitorClientApp.cpp(86,28): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
-C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\PsMonitor\PsMonitorClientApp\PsMonitorClientApp.cpp(166,28): warning C4477: 'printf' : format string '%08X' requires an argument of type 'unsigned int', but variadic argument 4 has type 'PVOID'
-C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\PsMonitor\PsMonitorClientApp\PsMonitorClientApp.cpp(166,28): warning C4313: 'printf': '%X' in format string conflicts with argument 4 of type 'PVOID'
+C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\PsMonitor\PsMonitorClientApp\PsMonitorClientApp.cpp(87,28): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\PsMonitor\PsMonitorClientApp\PsMonitorClientApp.cpp(167,28): warning C4477: 'printf' : format string '%08X' requires an argument of type 'unsigned int', but variadic argument 4 has type 'PVOID'
+C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\PsMonitor\PsMonitorClientApp\PsMonitorClientApp.cpp(167,28): warning C4313: 'printf': '%X' in format string conflicts with argument 4 of type 'PVOID'
   PsMonitorClientApp.vcxproj -> C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\PsMonitor\x64\Debug\PsMonitorClientApp.exe

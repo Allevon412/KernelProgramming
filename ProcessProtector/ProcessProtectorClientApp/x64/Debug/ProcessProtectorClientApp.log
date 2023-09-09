@@ -1,0 +1,5 @@
+﻿  ProcessProtectorClientApp.cpp
+C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\ProcessProtector\ProcessProtectorClientApp\ProcessProtectorClientApp.cpp(111,12): warning C4129: 'P': unrecognized character escape sequence
+C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\ProcessProtector\ProcessProtectorClientApp\ProcessProtectorClientApp.cpp(112,12): warning C4129: 'P': unrecognized character escape sequence
+C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\ProcessProtector\ProcessProtectorClientApp\ProcessProtectorClientApp.cpp(113,12): warning C4129: 'P': unrecognized character escape sequence
+  ProcessProtectorClientApp.vcxproj -> C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\ProcessProtector\x64\Debug\ProcessProtectorClientApp.exe
