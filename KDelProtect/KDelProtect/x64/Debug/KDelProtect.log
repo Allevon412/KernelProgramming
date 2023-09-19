@@ -1,0 +1,11 @@
+﻿  Building 'KDelProtect' with toolset 'WindowsKernelModeDriver10.0' and the 'Desktop' target platform.
+  MiniFilter.cpp
+FltGetFileNameRAIIWrapper.obj : error LNK2019: unresolved external symbol FltGetFileNameInformation referenced in function "public: __cdecl FilterFileNameInformation::FilterFileNameInformation(struct _FLT_CALLBACK_DATA *,enum FileNameOptions)" (??0FilterFileNameInformation@@QEAA@PEAU_FLT_CALLBACK_DATA@@W4FileNameOptions@@@Z)
+FltGetFileNameRAIIWrapper.obj : error LNK2019: unresolved external symbol FltReleaseFileNameInformation referenced in function "public: __cdecl FilterFileNameInformation::~FilterFileNameInformation(void)" (??1FilterFileNameInformation@@QEAA@XZ)
+FltGetFileNameRAIIWrapper.obj : error LNK2019: unresolved external symbol FltParseFileNameInformation referenced in function "public: long __cdecl FilterFileNameInformation::Parse(void)" (?Parse@FilterFileNameInformation@@QEAAJXZ)
+DriverMain.obj : error LNK2019: unresolved external symbol FltUnregisterFilter referenced in function DriverEntry
+MiniFilter.obj : error LNK2001: unresolved external symbol FltUnregisterFilter
+DriverMain.obj : error LNK2019: unresolved external symbol FltStartFiltering referenced in function DriverEntry
+MiniFilter.obj : error LNK2019: unresolved external symbol FltRegisterFilter referenced in function "long __cdecl InitMiniFilter(struct _DRIVER_OBJECT *,struct _UNICODE_STRING *)" (?InitMiniFilter@@YAJPEAU_DRIVER_OBJECT@@PEAU_UNICODE_STRING@@@Z)
+MiniFilter.obj : error LNK2019: unresolved external symbol FltParseFileName referenced in function "bool __cdecl IsDeleteAllowed(struct _UNICODE_STRING const *)" (?IsDeleteAllowed@@YA_NPEBU_UNICODE_STRING@@@Z)
+C:\Users\Brendan Ortiz\Desktop\UA-Stuff\Fall23\CYBV498Capstone\DriverProjects\KDelProtect\x64\Debug\KDelProtect.sys : fatal error LNK1120: 7 unresolved externals
